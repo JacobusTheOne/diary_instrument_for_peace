@@ -4,6 +4,7 @@
 !/tests/
 !/README.md
 !/.gitignore
+!/netlify.toml
 
 # Never commit notebooks, even encrypted ones.
 *.enc

@@ -1,0 +1,5 @@
+# Static site: no build step, publish the web/ folder as-is.
+# Security headers come from web/_headers.
+[build]
+  publish = "web"
+  command = ""

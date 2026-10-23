@@ -74,6 +74,7 @@ python -m http.server 8000      # then visit http://localhost:8000
 
 Browsers only allow the encryption API on HTTPS, which all of these hosts provide:
 
+- **Netlify from GitHub:** Add new site → Import an existing project → GitHub → pick this repository. `netlify.toml` already sets the publish folder to `web` with no build command, so just click Deploy. Every push then redeploys automatically.
 - **Netlify (no account setup beyond sign-in):** go to https://app.netlify.com/drop and drag
   the `web` folder onto the page. The `_headers` file adds security headers automatically.
 - **Cloudflare Pages:** Create → Pages → *Upload assets* → upload the `web` folder. It also
