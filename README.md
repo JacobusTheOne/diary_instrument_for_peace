@@ -48,7 +48,7 @@ inside the encrypted notebook.
 ## Português (Brasil)
 
 `web/pt-BR/` is the Brazilian Portuguese version. It's deployed with the English one, at
-`https://<your-site>/pt-BR/`, and each page's footer links to the other.
+`https://<your-site>/pt-BR/`. The US and Brazil flags in the top bar switch between the two. Unsaved work carries over through the encrypted browser copy; unlock it on the other page.
 
 - It uses the same encryption (`web/crypto.js`), stylesheet and file format, so a `.enc`
   file saved in one language opens in the other. New files are named

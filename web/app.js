@@ -933,6 +933,14 @@
     }));
     $('btnNewReflection').addEventListener('click', () => newReflection(state.selection));
     document.querySelectorAll('.tabs [data-view]').forEach((tab) => tab.addEventListener('click', () => setView(tab.dataset.view)));
+
+    // Language flags: refresh the encrypted browser copy first so the other page can unlock it.
+    document.querySelectorAll('.lang a').forEach((a) => a.addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (a.getAttribute('aria-current') === 'page') return;
+      if (state.session && prefs.browserCopy) await writeDraft();
+      location.href = a.href;
+    }));
     renderReference('emotions', Lists.emotions);
     renderReference('beliefs', Lists.beliefs);
 
