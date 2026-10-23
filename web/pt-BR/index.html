@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Nenhum acesso à rede: o diário nunca sai desta página sem criptografia. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>Caderno Criptografado</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='6' y='14' width='20' height='15' rx='3' fill='%233c6e71'/%3E%3Cpath d='M11 14v-4a5 5 0 0 1 10 0v4' fill='none' stroke='%233c6e71' stroke-width='3'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-icon" viewBox="0 0 32 32" aria-hidden="true"><rect x="6" y="14" width="20" height="15" rx="3"/><path d="M11 14v-4a5 5 0 0 1 10 0v4"/></svg>
+      <div>
+        <div class="brand-name">Caderno Criptografado</div>
+        <div class="file-line"><span id="fileName">Sem título</span><span id="dirty" class="dirty" hidden title="Alterações não salvas">●</span> <span id="cryptoStatus" class="crypto-status"></span></div>
+      </div>
+    </div>
+
+    <nav class="tabs" role="tablist">
+      <button role="tab" id="tabDiary" aria-selected="true" data-view="diary">Diário</button>
+      <button role="tab" id="tabReflect" aria-selected="false" data-view="reflect">Trabalhar pensamentos</button>
+      <button role="tab" id="tabEmotions" aria-selected="false" data-view="emotions">Emoções</button>
+      <button role="tab" id="tabBeliefs" aria-selected="false" data-view="beliefs">Crenças</button>
+    </nav>
+
+    <div class="actions">
+      <button id="btnNew" title="Novo caderno">Novo</button>
+      <button id="btnOpen" title="Abrir um arquivo criptografado (Ctrl+O)">Abrir</button>
+      <button id="btnSave" class="primary" title="Criptografar e salvar (Ctrl+S)">Salvar</button>
+      <button id="btnSaveAs" title="Salvar em um novo arquivo ou com outra senha">Salvar como…</button>
+      <button id="btnLock" title="Apagar o caderno e a chave desta página">Bloquear</button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden>
+    <span id="bannerText"></span>
+    <span class="banner-actions">
+      <button id="btnResume" class="primary">Desbloquear</button>
+      <button id="btnForget">Esquecer</button>
+    </span>
+  </div>
+
+  <main>
+    <section id="diaryView" class="view">
+      <div class="editor-bar">
+        <button id="btnDate" class="small">Inserir data</button>
+        <label class="check"><input type="checkbox" id="optBrowserCopy"> Guardar uma cópia criptografada neste navegador</label>
+        <span id="wordCount" class="muted"></span>
+      </div>
+      <textarea id="editor" spellcheck="true" lang="pt-BR" placeholder="Escreva livremente. Nada sai desta página sem criptografia.&#10;&#10;Quando estiver pronto(a), abra “Trabalhar pensamentos” para dividir uma entrada em pensamentos individuais e levar cada um pelo Instrumento para a Paz."></textarea>
+    </section>
+
+    <section id="reflectView" class="view" hidden>
+      <aside class="reflect-list">
+        <button id="btnNewReflection" class="primary block">+ Nova reflexão</button>
+        <ol id="reflectionList"></ol>
+      </aside>
+      <div id="reflectMain" class="reflect-main"></div>
+    </section>
+
+    <section id="emotionsView" class="view" hidden></section>
+    <section id="beliefsView" class="view" hidden></section>
+  </main>
+
+  <footer class="footer">
+    Tudo é criptografado no seu dispositivo (AES-256-GCM) — nada é enviado a um servidor.
+    · Folha de exercício: <a id="sourceLink" target="_blank" rel="noopener noreferrer">Instrumento para a Paz</a> de David Hoffmeister,
+    <a id="homeLink" target="_blank" rel="noopener noreferrer">livingmiracles.org</a> (tradução não oficial)
+    · <a href="../index.html" hreflang="en" lang="en">English</a>
+  </footer>
+
+  <dialog id="pwDialog">
+    <form method="dialog" id="pwForm">
+      <h2 id="pwTitle">Senha</h2>
+      <p id="pwMessage" class="muted"></p>
+      <label>Senha <input type="password" id="pwInput" autocomplete="current-password" required></label>
+      <label id="pwConfirmRow">Confirme a senha <input type="password" id="pwConfirm" autocomplete="new-password"></label>
+      <p id="pwError" class="error" role="alert"></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button value="ok" class="primary" id="pwOk">OK</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="choiceDialog">
+    <form method="dialog">
+      <h2 id="choiceTitle"></h2>
+      <p id="choiceMessage"></p>
+      <div class="dialog-actions" id="choiceButtons"></div>
+    </form>
+  </dialog>
+
+  <input type="file" id="fileInput" accept=".enc,.txt,application/octet-stream" hidden>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <script src="../crypto.js"></script>
+  <script src="instrument.js"></script>
+  <script src="lists.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

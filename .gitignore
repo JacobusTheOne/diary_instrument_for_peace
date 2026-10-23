@@ -1,0 +1,10 @@
+# Only the web app, its tests and the README are tracked.
+/*
+!/web/
+!/tests/
+!/README.md
+!/.gitignore
+
+# Never commit notebooks, even encrypted ones.
+*.enc
+__pycache__/

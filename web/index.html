@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- No network access at all: the diary can never leave this page unencrypted. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>Encrypted Notebook</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='6' y='14' width='20' height='15' rx='3' fill='%233c6e71'/%3E%3Cpath d='M11 14v-4a5 5 0 0 1 10 0v4' fill='none' stroke='%233c6e71' stroke-width='3'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-icon" viewBox="0 0 32 32" aria-hidden="true"><rect x="6" y="14" width="20" height="15" rx="3"/><path d="M11 14v-4a5 5 0 0 1 10 0v4"/></svg>
+      <div>
+        <div class="brand-name">Encrypted Notebook</div>
+        <div class="file-line"><span id="fileName">Untitled</span><span id="dirty" class="dirty" hidden title="Unsaved changes">●</span> <span id="cryptoStatus" class="crypto-status"></span></div>
+      </div>
+    </div>
+
+    <nav class="tabs" role="tablist">
+      <button role="tab" id="tabDiary" aria-selected="true" data-view="diary">Diary</button>
+      <button role="tab" id="tabReflect" aria-selected="false" data-view="reflect">Work through thoughts</button>
+      <button role="tab" id="tabEmotions" aria-selected="false" data-view="emotions">Emotions</button>
+      <button role="tab" id="tabBeliefs" aria-selected="false" data-view="beliefs">Beliefs</button>
+    </nav>
+
+    <div class="actions">
+      <button id="btnNew" title="New notebook">New</button>
+      <button id="btnOpen" title="Open an encrypted file (Ctrl+O)">Open</button>
+      <button id="btnSave" class="primary" title="Encrypt and save (Ctrl+S)">Save</button>
+      <button id="btnSaveAs" title="Save to a new file, password or format">Save as…</button>
+      <button id="btnLock" title="Clear the notebook and key from this page">Lock</button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden>
+    <span id="bannerText"></span>
+    <span class="banner-actions">
+      <button id="btnResume" class="primary">Unlock</button>
+      <button id="btnForget">Forget it</button>
+    </span>
+  </div>
+
+  <main>
+    <section id="diaryView" class="view">
+      <div class="editor-bar">
+        <button id="btnDate" class="small">Insert date</button>
+        <label class="check"><input type="checkbox" id="optBrowserCopy"> Keep an encrypted copy in this browser</label>
+        <span id="wordCount" class="muted"></span>
+      </div>
+      <textarea id="editor" spellcheck="true" placeholder="Write freely. Nothing leaves this page unencrypted.&#10;&#10;When you're ready, open “Work through thoughts” to break an entry into individual thoughts and bring each one through the Instrument for Peace."></textarea>
+    </section>
+
+    <section id="reflectView" class="view" hidden>
+      <aside class="reflect-list">
+        <button id="btnNewReflection" class="primary block">+ New reflection</button>
+        <ol id="reflectionList"></ol>
+      </aside>
+      <div id="reflectMain" class="reflect-main"></div>
+    </section>
+
+    <section id="emotionsView" class="view" hidden></section>
+    <section id="beliefsView" class="view" hidden></section>
+  </main>
+
+  <footer class="footer">
+    Everything is encrypted on your device (AES-256-GCM) — nothing is ever sent to a server.
+    · Worksheet: <a id="sourceLink" target="_blank" rel="noopener noreferrer">Instrument for Peace</a> by David Hoffmeister,
+    <a id="homeLink" target="_blank" rel="noopener noreferrer">livingmiracles.org</a>
+    · <a href="pt-BR/index.html" hreflang="pt-BR" lang="pt-BR">Português (Brasil)</a>
+  </footer>
+
+  <dialog id="pwDialog">
+    <form method="dialog" id="pwForm">
+      <h2 id="pwTitle">Password</h2>
+      <p id="pwMessage" class="muted"></p>
+      <label>Password <input type="password" id="pwInput" autocomplete="current-password" required></label>
+      <label id="pwConfirmRow">Confirm password <input type="password" id="pwConfirm" autocomplete="new-password"></label>
+      <p id="pwError" class="error" role="alert"></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button value="ok" class="primary" id="pwOk">OK</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="choiceDialog">
+    <form method="dialog">
+      <h2 id="choiceTitle"></h2>
+      <p id="choiceMessage"></p>
+      <div class="dialog-actions" id="choiceButtons"></div>
+    </form>
+  </dialog>
+
+  <input type="file" id="fileInput" accept=".enc,.txt,application/octet-stream" hidden>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <script src="crypto.js"></script>
+  <script src="instrument.js"></script>
+  <script src="lists.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
