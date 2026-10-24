@@ -10,8 +10,10 @@ what you wrote using David Hoffmeister's **Instrument for Peace**.
 
 ## What the web app does
 
-**Diary.** A plain-text editor. **Save** encrypts the notebook and writes a `.enc` file;
-**Open** decrypts one. The password is never stored or sent anywhere. The page's Content
+**Diary.** A list of dated entries, newest first. **+ New entry** starts one with today's date
+and time at the top. Notebooks from before entries existed open as a single "Earlier notes"
+entry. **Save** encrypts the whole notebook and writes a `.enc` file; **Open** decrypts one.
+The eye button in the password box shows what you typed. The password is never stored or sent anywhere. The page's Content
 Security Policy blocks all network requests, so nothing can leave the page.
 
 - In Chrome/Edge, Save writes back to the same file. In Firefox, Safari and on phones,

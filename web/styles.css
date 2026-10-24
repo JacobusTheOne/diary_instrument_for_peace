@@ -137,7 +137,7 @@ button.link {
 }
 button.danger-link { color: var(--danger); }
 
-textarea, input[type="password"] {
+textarea, input[type="password"], .pw-field input {
   font: inherit;
   color: var(--text);
   background: var(--surface);
@@ -224,8 +224,12 @@ main { flex: 1; display: flex; flex-direction: column; padding: 1rem 1.25rem; mi
   box-shadow: var(--shadow);
 }
 
-#reflectView { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 1.25rem; align-items: start; }
-#reflectView[hidden] { display: none; }
+#diaryView, #reflectView { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+#diaryView[hidden], #reflectView[hidden] { display: none; }
+
+.diary-main { display: flex; flex-direction: column; min-width: 0; }
+.entry-head { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem 1rem; flex-wrap: wrap; margin-bottom: .35rem; }
+.entry-date { margin: 0; font-size: 1.3rem; }
 
 .reflect-list { position: sticky; top: 5rem; }
 .reflect-list ol { list-style: none; margin: .75rem 0 0; padding: 0; display: grid; gap: .35rem; }
@@ -403,6 +407,25 @@ dialog form { display: grid; gap: .75rem; }
 dialog label:not(.check) { display: grid; gap: .3rem; font-size: .9rem; }
 dialog h2 { font-size: 1.25rem; margin: 0; }
 dialog p { margin: 0; }
+.pw-field { position: relative; display: block; }
+.pw-field input { padding-right: 2.6rem; }
+.pw-field input::-ms-reveal { display: none; }
+.reveal {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  padding: .35rem;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+}
+.reveal:hover:not(:disabled) { color: var(--text); }
+.reveal svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.reveal .eye-off, .reveal[aria-pressed="true"] .eye-on { display: none; }
+.reveal[aria-pressed="true"] .eye-off { display: block; }
+
 .error { color: var(--danger); min-height: 1.2em; font-size: .9rem; }
 .dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .5rem; margin-top: .25rem; }
 
@@ -416,7 +439,7 @@ dialog p { margin: 0; }
 /* ---------- small screens ---------- */
 
 @media (max-width: 820px) {
-  #reflectView { grid-template-columns: minmax(0, 1fr); }
+  #diaryView, #reflectView { grid-template-columns: minmax(0, 1fr); }
   .reflect-list { position: static; }
   .reflect-list ol { max-height: 9.5rem; overflow-y: auto; }
   .levels-grid { grid-template-columns: minmax(0, 1fr); }

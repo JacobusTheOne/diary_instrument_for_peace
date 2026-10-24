@@ -25,7 +25,8 @@
     fileHandle: null,
     dirty: false,
     view: 'diary',
-    activeId: null,
+    entryId: null, // open diary entry
+    activeId: null, // open reflection
     selection: '',
     gen: 0, // bumped whenever the loaded notebook changes, so stale async writes are dropped
   };
@@ -34,9 +35,14 @@
   let draftTimer = null;
   let draftPending = false;
 
+  // version 3: the diary is a list of dated entries (version 2 had a single `text`).
   function emptyDoc() {
-    return { app: 'encrypted-notebook', version: 2, text: '', reflections: [] };
+    return { app: 'encrypted-notebook', version: 3, entries: [], reflections: [] };
   }
+
+  const newEntry = (text = '') => ({ id: uid(), created: new Date().toISOString(), text });
+  // Text from older notebooks has no date of its own.
+  const importedEntry = (text) => ({ id: uid(), created: null, text: text.replace(/\s+$/, '') });
 
   // New notebooks are named after the day they're saved, e.g. forgiveness_diary_2026-10-23.enc
   function fileLabel() {
@@ -96,6 +102,17 @@
 
   // ---------- dialogs ----------
 
+  // Eye button inside a password field: shows or hides what was typed.
+  function setReveal(btn, show) {
+    btn.previousElementSibling.type = show ? 'text' : 'password';
+    btn.setAttribute('aria-pressed', String(show));
+    const label = show ? 'Hide password' : 'Show password';
+    btn.setAttribute('aria-label', label);
+    btn.title = label;
+  }
+
+  const hidePasswords = () => document.querySelectorAll('#pwDialog .reveal').forEach((btn) => setReveal(btn, false));
+
   /**
    * Password prompt. With `verify`, the dialog stays open until verify(password)
    * resolves, showing its error otherwise; its result is returned as `result`.
@@ -112,6 +129,7 @@
       $('pwInput').autocomplete = confirm ? 'new-password' : 'current-password';
       $('pwConfirmRow').hidden = !confirm;
       $('pwOk').disabled = false;
+      hidePasswords();
       let result;
 
       async function onSubmit(e) {
@@ -144,6 +162,7 @@
         const out = ok ? { password: $('pwInput').value, result } : null;
         $('pwInput').value = '';
         $('pwConfirm').value = '';
+        hidePasswords();
         resolve(out);
       }
 
@@ -177,11 +196,12 @@
       try {
         const d = JSON.parse(plaintext);
         if (d && d.app === 'encrypted-notebook') {
-          return { ...emptyDoc(), ...d, text: String(d.text || ''), reflections: Array.isArray(d.reflections) ? d.reflections : [] };
+          const entries = Array.isArray(d.entries) ? d.entries : String(d.text || '').trim() ? [importedEntry(String(d.text))] : [];
+          return { ...emptyDoc(), entries, reflections: Array.isArray(d.reflections) ? d.reflections : [] };
         }
       } catch (e) { /* not ours: treat as plain text */ }
     }
-    return { ...emptyDoc(), text: plaintext };
+    return { ...emptyDoc(), entries: plaintext.trim() ? [importedEntry(plaintext)] : [] };
   }
 
   function loadDoc(doc, { session = null, fileName = null, handle = null, dirty = false } = {}) {
@@ -193,8 +213,9 @@
     state.dirty = dirty;
     const last = doc.reflections[doc.reflections.length - 1];
     state.activeId = last ? last.id : null;
-    $('editor').value = doc.text;
-    refreshChrome();
+    const newest = sortedEntries()[0];
+    state.entryId = newest ? newest.id : null;
+    renderDiary();
     renderReflect();
   }
 
@@ -215,7 +236,8 @@
       s.textContent = 'Encrypted · AES-256';
       s.className = 'crypto-status ok';
     }
-    const words = (state.doc.text.match(/\S+/g) || []).length;
+    const entry = currentEntry();
+    const words = ((entry ? entry.text : '').match(/\S+/g) || []).length;
     $('wordCount').textContent = words === 1 ? '1 word' : `${words} words`;
     document.title = (state.dirty ? '• ' : '') + fileLabel().replace(/\.enc$/, '') + ' — Encrypted Notebook';
   }
@@ -427,14 +449,71 @@
 
   // ---------- diary view ----------
 
-  function insertDate() {
-    const ed = $('editor');
-    const stamp = new Date().toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' });
-    const before = ed.value.slice(0, ed.selectionStart);
-    const lead = before && !before.endsWith('\n\n') ? (before.endsWith('\n') ? '\n' : '\n\n') : '';
-    ed.setRangeText(`${lead}— ${stamp} —\n`, ed.selectionStart, ed.selectionEnd, 'end');
-    ed.dispatchEvent(new Event('input'));
-    ed.focus();
+  const currentEntry = () => state.doc.entries.find((e) => e.id === state.entryId) || null;
+  // Newest first; undated (imported) text last.
+  const sortedEntries = () => state.doc.entries.slice().sort((a, b) => (b.created || '').localeCompare(a.created || ''));
+  // All entries, oldest first, for "Use whole diary".
+  const wholeDiary = () => sortedEntries().reverse().map((e) => e.text.trim()).filter(Boolean).join('\n\n');
+
+  function entryDate(e, dateStyle = 'full') {
+    return e.created ? new Date(e.created).toLocaleString(undefined, { dateStyle, timeStyle: 'short' }) : 'Earlier notes';
+  }
+
+  // A notebook always has an entry open, so there is somewhere to type.
+  function ensureEntry() {
+    if (!state.doc.entries.length) state.doc.entries.push(newEntry());
+    if (!currentEntry()) state.entryId = sortedEntries()[0].id;
+  }
+
+  function renderDiary() {
+    ensureEntry();
+    const e = currentEntry();
+    $('entryDate').textContent = entryDate(e);
+    if ($('editor').value !== e.text) $('editor').value = e.text;
+    renderEntryList();
+    refreshChrome();
+  }
+
+  function renderEntryList() {
+    $('entryList').replaceChildren(...sortedEntries().map((e) => {
+      const first = e.text.trim().split('\n')[0];
+      const preview = !first ? 'Empty entry' : first.length > 60 ? first.slice(0, 58).trimEnd() + '…' : first;
+      return h('li', { class: e.id === state.entryId ? 'active' : null },
+        h('button', { class: 'reflection-item', onclick: () => { state.entryId = e.id; renderDiary(); $('editor').focus(); } },
+          h('span', { class: 'muted small' }, entryDate(e, 'medium')),
+          h('span', { class: 'reflection-title' + (first ? '' : ' muted') }, preview)));
+    }));
+  }
+
+  function addEntry() {
+    const cur = currentEntry();
+    if (cur && !cur.text.trim()) {
+      cur.created = new Date().toISOString(); // reuse a blank entry instead of piling them up
+    } else {
+      const e = newEntry();
+      state.doc.entries.push(e);
+      state.entryId = e.id;
+    }
+    markDirty();
+    setView('diary');
+    renderDiary();
+    $('editor').focus();
+  }
+
+  async function deleteEntry() {
+    const e = currentEntry();
+    if (!e) return;
+    if (e.text.trim()) {
+      const c = await choose('Delete this entry?', `The entry from ${entryDate(e)} will be removed from the notebook.`, [
+        { label: 'Cancel', value: 'cancel' },
+        { label: 'Delete', value: 'delete', danger: true },
+      ]);
+      if (c !== 'delete') return;
+    }
+    state.doc.entries = state.doc.entries.filter((x) => x !== e);
+    state.entryId = null;
+    markDirty();
+    renderDiary();
   }
 
   // Views: diary, reflect, emotions, beliefs. Each tab has data-view and its section is `${view}View`.
@@ -602,16 +681,10 @@
       stageHeader(r, 1, 'Choose what to look at', 'Pick an entry or a passage from your diary. Look at it gently, without judging it — the aim is only to see the thoughts clearly.'),
       h('div', { class: 'row' },
         h('button', { class: 'small', disabled: !state.selection, title: state.selection ? null : 'Select text in the Diary tab first', onclick: () => fill(state.selection) }, 'Use selected text'),
-        h('button', { class: 'small', disabled: !state.doc.text.trim(), onclick: () => fill(lastEntry(state.doc.text)) }, 'Use latest entry'),
-        h('button', { class: 'small', disabled: !state.doc.text.trim(), onclick: () => fill(state.doc.text.trim()) }, 'Use whole diary')),
+        h('button', { class: 'small', disabled: !(currentEntry() && currentEntry().text.trim()), onclick: () => fill(currentEntry().text.trim()) }, 'Use current entry'),
+        h('button', { class: 'small', disabled: !wholeDiary(), onclick: () => fill(wholeDiary()) }, 'Use whole diary')),
       ta,
       h('div', { class: 'nav-row' }, h('span'), breakBtn));
-  }
-
-  // The text after the last date stamp, or the last paragraph block.
-  function lastEntry(text) {
-    const parts = text.split(/^\s*—.*—\s*$/m).map((s) => s.trim()).filter(Boolean);
-    return parts.length ? parts[parts.length - 1] : text.trim();
   }
 
   // Stage 2: one thought per card.
@@ -878,20 +951,21 @@
           h('button', { class: 'primary', onclick: () => setView('diary') }, 'Back to diary'))));
   }
 
+  // The summary becomes a new dated diary entry.
   function appendSummaryToDiary(r) {
-    const stamp = new Date().toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' });
-    const lines = [`— Reflection, ${stamp} —`];
+    const lines = ['Reflection summary'];
     for (const t of included(r)) {
       lines.push(`• ${t.text}`);
       if (t.ws.D) lines.push(`  Belief questioned: ${t.ws.D}`);
       if (t.ws.E) lines.push(`  Desire let go of: ${t.ws.E}`);
       if (t.ws.insights) lines.push(`  Insights: ${t.ws.insights.replace(/\n+/g, ' ')}`);
     }
-    const ed = $('editor');
-    ed.value = ed.value.replace(/\s*$/, '') + (ed.value.trim() ? '\n\n' : '') + lines.join('\n') + '\n';
-    ed.dispatchEvent(new Event('input'));
+    const e = newEntry(lines.join('\n') + '\n');
+    state.doc.entries.push(e);
+    state.entryId = e.id;
+    markDirty();
     setView('diary');
-    ed.scrollTop = ed.scrollHeight;
+    renderDiary();
     toast('Summary added to the diary');
   }
 
@@ -914,8 +988,10 @@
     $('sourceLink').href = Instrument.source.url;
     $('homeLink').href = Instrument.source.home;
 
-    $('editor').addEventListener('input', () => { state.doc.text = $('editor').value; markDirty(); });
-    $('btnDate').addEventListener('click', insertDate);
+    $('editor').addEventListener('input', () => { currentEntry().text = $('editor').value; markDirty(); renderEntryList(); });
+    $('btnNewEntry').addEventListener('click', addEntry);
+    $('btnDeleteEntry').addEventListener('click', run(deleteEntry));
+    document.querySelectorAll('#pwDialog .reveal').forEach((btn) => btn.addEventListener('click', () => setReveal(btn, btn.getAttribute('aria-pressed') !== 'true')));
     $('btnNew').addEventListener('click', run(newNotebook));
     $('btnOpen').addEventListener('click', run(openFile));
     $('btnSave').addEventListener('click', run(() => save(false)));
@@ -969,7 +1045,7 @@
       if (state.dirty && !covered) { e.preventDefault(); e.returnValue = ''; }
     });
 
-    refreshChrome();
+    renderDiary();
     renderReflect();
     showBanner();
     $('editor').focus();
