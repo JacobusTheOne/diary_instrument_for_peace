@@ -25,7 +25,7 @@ Security Policy blocks all network requests, so nothing can leave the page.
   the next Save re-encrypts them in the stronger web format. After that, only the web app
   can open them.
 
-**Work through thoughts.** A three-stage guided process:
+**Instrument for Peace.** A three-stage guided process:
 
 1. **Choose** a passage: the selected text, the latest entry, or the whole diary.
 2. **Break it down** into one thought per card. The text is split by sentence, and you can
@@ -37,6 +37,22 @@ Security Policy blocks all network requests, so nothing can leave the page.
    - If you feel resistance, continue through the 12 steps of the Instrument. Your answers
      appear in red and can be edited in place, as on the original form.
    - *Insights*: write what you noticed, then move on to the next thought.
+
+**Byron Katie's Worksheet.** A guided version of the Judge-Your-Neighbor Worksheet from
+*The Work of Byron Katie*:
+
+1. **The situation:** who it's with, and one specific time and place (it can be taken from
+   the open diary entry).
+2. **The six statements**, one screen each, in Katie's sentence frames with her examples.
+   The app shows the sentence each answer will be questioned as.
+3. **Inquiry:** each statement goes through the four questions. Answering "No" to "Is it
+   true?" skips to question 3. Then come the turnarounds (to the self, to the other, to the
+   opposite) with room for three examples each. Statement 6 gets "I am willing…" and "I look
+   forward to…" pre-filled.
+
+The summary can be added to the diary as a new entry. Worksheets are saved in the
+encrypted notebook. The worksheet wording lives in `web/katie.js` and `web/pt-BR/katie.js`;
+the Portuguese version uses the official *Formulário Julgue Seu Próximo*.
 
 **Emotions** and **Beliefs** are reference lists to help put words to field B (grouped
 upsetting emotions) and field D (common beliefs in lack about self, others and the world).
@@ -96,6 +112,10 @@ Browsers only allow the encryption API on HTTPS, which all of these hosts provid
 - The worksheet text belongs to David Hoffmeister / Living Miracles
   ([original PDF](https://livingmiraclescenter.org/doc/instrument-for-peace.pdf)). It's free
   for personal use. If you publish the app for other people, ask Living Miracles first.
+- The Judge-Your-Neighbor Worksheet and its Portuguese edition are ©Byron Katie
+  International, Inc., and "The Work of Byron Katie" is a registered trademark
+  ([thework.com](https://thework.com/instruction-the-work-byron-katie/)). Katie offers the
+  worksheet free to download. If you publish the app for other people, check their terms first.
 
 ## Tests
 

@@ -22,7 +22,8 @@
 
     <nav class="tabs" role="tablist">
       <button role="tab" id="tabDiary" aria-selected="true" data-view="diary">Diary</button>
-      <button role="tab" id="tabReflect" aria-selected="false" data-view="reflect">Work through thoughts</button>
+      <button role="tab" id="tabReflect" aria-selected="false" data-view="reflect">Instrument for Peace</button>
+      <button role="tab" id="tabKatie" aria-selected="false" data-view="katie">Byron Katie’s Worksheet</button>
       <button role="tab" id="tabEmotions" aria-selected="false" data-view="emotions">Emotions</button>
       <button role="tab" id="tabBeliefs" aria-selected="false" data-view="beliefs">Beliefs</button>
     </nav>
@@ -80,7 +81,7 @@
         <label class="check"><input type="checkbox" id="optBrowserCopy"> Keep an encrypted copy in this browser</label>
         <span id="wordCount" class="muted"></span>
       </div>
-      <textarea id="editor" spellcheck="true" placeholder="Write freely. Nothing leaves this page unencrypted.&#10;&#10;When you're ready, open “Work through thoughts” to break an entry into individual thoughts and bring each one through the Instrument for Peace."></textarea>
+      <textarea id="editor" spellcheck="true" placeholder="Write freely. Nothing leaves this page unencrypted.&#10;&#10;When you're ready, work through what you wrote with the “Instrument for Peace” or “Byron Katie’s Worksheet” tab."></textarea>
       </div>
     </section>
 
@@ -92,6 +93,14 @@
       <div id="reflectMain" class="reflect-main"></div>
     </section>
 
+    <section id="katieView" class="view" hidden>
+      <aside class="reflect-list">
+        <button id="btnNewWorksheet" class="primary block">+ New worksheet</button>
+        <ol id="worksheetList"></ol>
+      </aside>
+      <div id="katieMain" class="reflect-main"></div>
+    </section>
+
     <section id="emotionsView" class="view" hidden></section>
     <section id="beliefsView" class="view" hidden></section>
   </main>
@@ -100,6 +109,7 @@
     Everything is encrypted on your device (AES-256-GCM) — nothing is ever sent to a server.
     · Worksheet: <a id="sourceLink" target="_blank" rel="noopener noreferrer">Instrument for Peace</a> by David Hoffmeister,
     <a id="homeLink" target="_blank" rel="noopener noreferrer">livingmiracles.org</a>
+    · Judge-Your-Neighbor Worksheet: <a href="https://thework.com/instruction-the-work-byron-katie/" target="_blank" rel="noopener noreferrer">The Work of Byron Katie®</a>
   </footer>
 
   <dialog id="pwDialog">
@@ -129,6 +139,7 @@
 
   <script src="crypto.js"></script>
   <script src="instrument.js"></script>
+  <script src="katie.js"></script>
   <script src="lists.js"></script>
   <script src="app.js"></script>
 </body>

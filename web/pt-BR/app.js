@@ -29,6 +29,7 @@
     view: 'diary',
     entryId: null, // open diary entry
     activeId: null, // open reflection
+    wsId: null, // open Byron Katie worksheet
     selection: '',
     gen: 0, // bumped whenever the loaded notebook changes, so stale async writes are dropped
   };
@@ -39,7 +40,7 @@
 
   // version 3: the diary is a list of dated entries (version 2 had a single `text`).
   function emptyDoc() {
-    return { app: 'encrypted-notebook', version: 3, entries: [], reflections: [] };
+    return { app: 'encrypted-notebook', version: 3, entries: [], reflections: [], worksheets: [] };
   }
 
   const newEntry = (text = '') => ({ id: uid(), created: new Date().toISOString(), text });
@@ -201,7 +202,12 @@
         const d = JSON.parse(plaintext);
         if (d && d.app === 'encrypted-notebook') {
           const entries = Array.isArray(d.entries) ? d.entries : String(d.text || '').trim() ? [importedEntry(String(d.text))] : [];
-          return { ...emptyDoc(), entries, reflections: Array.isArray(d.reflections) ? d.reflections : [] };
+          return {
+            ...emptyDoc(),
+            entries,
+            reflections: Array.isArray(d.reflections) ? d.reflections : [],
+            worksheets: Array.isArray(d.worksheets) ? d.worksheets : [],
+          };
         }
       } catch (e) { /* not ours: treat as plain text */ }
     }
@@ -219,8 +225,11 @@
     state.activeId = last ? last.id : null;
     const newest = sortedEntries()[0];
     state.entryId = newest ? newest.id : null;
+    const lastWs = doc.worksheets[doc.worksheets.length - 1];
+    state.wsId = lastWs ? lastWs.id : null;
     renderDiary();
     renderReflect();
+    renderKatie();
   }
 
   function markDirty() {
@@ -533,6 +542,7 @@
       $(`${tab.dataset.view}View`).hidden = !on;
     });
     if (view === 'reflect') renderReflect();
+    if (view === 'katie') renderKatie();
     window.scrollTo({ top: 0 });
   }
 
@@ -973,6 +983,408 @@
     toast('Resumo adicionado ao diário');
   }
 
+  // ---------- Byron Katie's worksheet ----------
+  // Situation -> six statements -> statements to question -> four questions + turnarounds -> summary.
+
+  const K = window.Katie;
+  const activeWorksheet = () => state.doc.worksheets.find((w) => w.id === state.wsId) || null;
+  const includedBeliefs = (w) => w.beliefs.filter((b) => b.include && b.text.trim());
+
+  function newWorksheet(situation) {
+    const w = {
+      id: uid(), created: new Date().toISOString(), stage: 'situation', name: '', situation: situation || '',
+      emotion: '', answers: { 1: '', 2: '', 3: '', 4: '', 5: '', 6: '' }, statement: 1, beliefs: [], current: 0,
+    };
+    state.doc.worksheets.push(w);
+    state.wsId = w.id;
+    markDirty();
+    renderKatie();
+  }
+
+  function newBelief(text, from) {
+    return { id: uid(), text, from, include: true, status: 'pending', step: 0, q1: null, q2: null, q3: '', q4: '', turnarounds: [] };
+  }
+
+  // The sentence a statement turns into, e.g. "I want Paul to see that he is wrong."
+  function statementSentence(w, st) {
+    const text = (w.answers[st.n] || '').trim();
+    if (!text) return '';
+    const vals = { name: w.name.trim() || K.ui.someone, emotion: w.emotion.trim(), text };
+    let s = st.frame.map((p) => (p[0] === '{' ? vals[p.slice(1, -1)] : p)).join('').replace(/\s+/g, ' ').trim();
+    if (!/[.!?…]$/.test(s)) s += '.';
+    return s;
+  }
+
+  // Statement 6 turns around to "I am willing…" / "I look forward to…"; the rest to self, other, opposite.
+  function defaultTurnarounds(b) {
+    const T = K.turnaround;
+    const rest = b.text.replace(T.s6prefix, '');
+    if (b.from === 6 && rest !== b.text) {
+      return T.s6.map((k) => ({ kind: k.label, text: k.make(rest.replace(/[.!?…]+$/, '')) + '.', examples: '' }));
+    }
+    return T.kinds.map((k) => ({ kind: k.label, text: '', examples: '' }));
+  }
+
+  function goK(obj, changes) {
+    Object.assign(obj, changes);
+    markDirty();
+    renderKatie();
+    window.scrollTo({ top: 0 });
+  }
+
+  function worksheetTitle(w) {
+    const base = [w.name.trim(), w.situation.trim()].filter(Boolean).join(' — ') || K.ui.untitled;
+    return base.length > 52 ? base.slice(0, 50).trimEnd() + '…' : base;
+  }
+
+  function nextPendingBelief(w, fromIndex) {
+    const list = w.beliefs;
+    for (let k = 1; k <= list.length; k++) {
+      const i = (fromIndex + k) % list.length;
+      const b = list[i];
+      if (b.include && b.text.trim() && b.status !== 'done') return i;
+    }
+    return -1;
+  }
+
+  function renderKatie() {
+    $('worksheetList').replaceChildren(...state.doc.worksheets.slice().reverse().map((w) => {
+      const inc = includedBeliefs(w);
+      const done = inc.filter((b) => b.status === 'done').length;
+      const date = new Date(w.created).toLocaleDateString('pt-BR', { dateStyle: 'medium' });
+      return h('li', { class: w.id === state.wsId ? 'active' : null },
+        h('button', { class: 'reflection-item', onclick: () => { state.wsId = w.id; renderKatie(); } },
+          h('span', { class: 'reflection-title' }, worksheetTitle(w)),
+          h('span', { class: 'muted small' }, inc.length ? `${date} · ${K.ui.progress(done, inc.length)}` : date)));
+    }));
+    const w = activeWorksheet();
+    const render = w && { situation: renderKSituation, statements: renderKStatements, beliefs: renderKBeliefs, inquiry: renderKInquiry, summary: renderKSummary }[w.stage];
+    $('katieMain').replaceChildren(render ? render(w) : renderKWelcome());
+  }
+
+  function renderKWelcome() {
+    return h('div', { class: 'card welcome' },
+      h('h2', null, K.ui.title),
+      h('p', null, K.ui.intro),
+      h('ol', { class: 'how' }, K.ui.how.map(([lead, rest]) => h('li', null, h('strong', null, lead), rest))),
+      h('div', { class: 'row' },
+        h('button', { class: 'primary', onclick: () => newWorksheet(state.selection) }, state.selection ? K.ui.startSelected : K.ui.start)));
+  }
+
+  function kHeader(w, n, title, text) {
+    return [
+      h('div', { class: 'stage-row' },
+        h('span', { class: 'stage-num' }, K.ui.stage(n)),
+        h('button', { class: 'link danger-link', onclick: () => deleteWorksheet(w) }, K.ui.deleteWs)),
+      h('h2', null, title),
+      text ? h('p', { class: 'muted' }, text) : null,
+    ];
+  }
+
+  async function deleteWorksheet(w) {
+    const c = await choose(K.ui.deleteTitle, K.ui.deleteMsg(worksheetTitle(w)), [
+      { label: K.ui.cancel, value: 'cancel' },
+      { label: K.ui.del, value: 'delete', danger: true },
+    ]);
+    if (c !== 'delete') return;
+    state.doc.worksheets = state.doc.worksheets.filter((x) => x !== w);
+    const last = state.doc.worksheets[state.doc.worksheets.length - 1];
+    state.wsId = last ? last.id : null;
+    markDirty();
+    renderKatie();
+  }
+
+  // Stage 1: who it is with, and the situation.
+  function renderKSituation(w) {
+    const name = h('input', { type: 'text', value: w.name, placeholder: K.ui.namePlaceholder, 'aria-label': K.ui.nameLabel });
+    name.addEventListener('input', () => { w.name = name.value; markDirty(); });
+    const ta = h('textarea', { class: 'source', value: w.situation, placeholder: K.ui.situationPlaceholder, 'aria-label': K.ui.situationLabel });
+    ta.addEventListener('input', () => { w.situation = ta.value; markDirty(); });
+    const fill = (text) => { ta.value = text; ta.dispatchEvent(new Event('input')); };
+    const entry = currentEntry();
+    return h('div', { class: 'card' },
+      kHeader(w, 1, K.ui.situationTitle, K.ui.situationText),
+      h('label', { class: 'field-row' }, h('span', { class: 'field-label' }, K.ui.nameLabel), name),
+      h('div', { class: 'field-row' },
+        h('span', { class: 'field-label' }, K.ui.situationLabel),
+        h('div', { class: 'row' },
+          h('button', { class: 'small', disabled: !state.selection, title: state.selection ? null : K.ui.selectFirst, onclick: () => fill(state.selection) }, K.ui.useSelected),
+          h('button', { class: 'small', disabled: !(entry && entry.text.trim()), onclick: () => fill(entry.text.trim()) }, K.ui.useEntry)),
+        ta),
+      h('div', { class: 'nav-row' }, h('span'),
+        h('button', { class: 'primary', onclick: () => goK(w, { stage: 'statements' }) }, K.ui.toStatements)));
+  }
+
+  // Stage 2: the six statements, one per screen, in Katie's sentence frames.
+  function renderKStatements(w) {
+    const n = w.statement;
+    const st = K.statements[n - 1];
+    const preview = h('p', { class: 'muted small preview' });
+    const updatePreview = () => {
+      const s = statementSentence(w, st);
+      preview.replaceChildren(...(s ? [K.ui.preview, h('em', null, s)] : []));
+    };
+    const frame = h('p', { class: 'frame' });
+    let text = null;
+    for (const part of st.frame) {
+      if (part === '{name}') {
+        frame.append(h('strong', { class: 'frame-name' }, w.name.trim() || K.ui.someone));
+      } else if (part === '{emotion}') {
+        const em = h('input', { type: 'text', class: 'frame-input', value: w.emotion, placeholder: K.ui.emotionPlaceholder, 'aria-label': K.ui.emotionPlaceholder });
+        em.addEventListener('input', () => { w.emotion = em.value; markDirty(); updatePreview(); });
+        frame.append(em);
+      } else if (part === '{text}') {
+        text = autoTextarea({ value: w.answers[n], placeholder: st.hint, 'aria-label': st.question }, (v) => { w.answers[n] = v; markDirty(); updatePreview(); });
+      } else {
+        frame.append(part);
+      }
+    }
+    updatePreview();
+
+    const pips = h('div', { class: 'stepper' }, K.statements.map((s) => h('button', {
+      class: 'step-pip' + (s.n === n ? ' current' : '') + ((w.answers[s.n] || '').trim() && s.n !== n ? ' past' : ''),
+      title: K.ui.statementOf(s.n),
+      onclick: () => goK(w, { statement: s.n }),
+    }, String(s.n))));
+
+    return h('div', { class: 'card' },
+      kHeader(w, 2, K.ui.statementsTitle),
+      pips,
+      h('h3', null, K.ui.statementOf(n)),
+      h('p', { class: 'statement-q' }, st.question),
+      h('p', { class: 'muted small' }, K.ui.exampleLabel, h('em', null, st.example)),
+      frame,
+      text,
+      preview,
+      h('div', { class: 'nav-row' },
+        h('button', { onclick: () => goK(w, n === 1 ? { stage: 'situation' } : { statement: n - 1 }) }, K.ui.back),
+        n < K.statements.length
+          ? h('button', { class: 'primary', onclick: () => goK(w, { statement: n + 1 }) }, K.ui.next)
+          : h('button', { class: 'primary', onclick: () => toBeliefs(w) }, K.ui.toBeliefs)));
+  }
+
+  // One belief per sentence of each statement. Beliefs already being questioned are kept.
+  function toBeliefs(w) {
+    const old = new Map(w.beliefs.map((b) => [b.text, b]));
+    const fresh = [];
+    for (const st of K.statements) {
+      for (const text of splitThoughts(statementSentence(w, st))) fresh.push(old.get(text) || newBelief(text, st.n));
+    }
+    const started = w.beliefs.filter((b) => (b.status === 'done' || b.step > 0) && !fresh.includes(b));
+    goK(w, { stage: 'beliefs', beliefs: [...fresh, ...started], current: 0 });
+  }
+
+  // Stage 2b: the list of statements to question.
+  function renderKBeliefs(w) {
+    const list = h('ol', { class: 'thoughts' });
+    const begin = h('button', { class: 'primary' });
+    const updateBegin = () => {
+      const n = includedBeliefs(w).length;
+      begin.textContent = K.ui.begin(n);
+      begin.disabled = n === 0;
+    };
+    const rerender = () => { markDirty(); $('katieMain').replaceChildren(renderKBeliefs(w)); };
+
+    w.beliefs.forEach((b, i) => {
+      const ta = autoTextarea({ value: b.text, 'aria-label': K.ui.fromStatement(b.from) }, (v) => {
+        b.text = v;
+        if (!b.step) b.turnarounds = [];
+        markDirty();
+        updateBegin();
+      });
+      const check = h('input', { type: 'checkbox', checked: b.include, title: K.ui.include, 'aria-label': K.ui.include });
+      const li = h('li', { class: 'thought' + (b.include ? '' : ' excluded') + (b.status === 'done' ? ' done' : '') },
+        h('label', { class: 'thought-check', title: b.from ? K.ui.fromStatement(b.from) : null }, check, h('span', { class: 'thought-num' }, b.from || '+')),
+        ta,
+        h('div', { class: 'thought-tools' },
+          h('button', { class: 'small', onclick: () => {
+            const at = ta.selectionStart;
+            const a = b.text.slice(0, at).trim();
+            const rest = b.text.slice(at).trim();
+            if (!a || !rest) { toast(K.ui.splitHint); return; }
+            b.text = a;
+            b.turnarounds = [];
+            w.beliefs.splice(i + 1, 0, newBelief(rest, b.from));
+            rerender();
+          } }, K.ui.split),
+          h('button', { class: 'small', onclick: () => { w.beliefs.splice(i, 1); rerender(); } }, K.ui.remove)));
+      check.addEventListener('change', () => { b.include = check.checked; li.classList.toggle('excluded', !b.include); markDirty(); updateBegin(); });
+      list.append(li);
+    });
+
+    updateBegin();
+    begin.addEventListener('click', () => {
+      const first = w.beliefs.findIndex((b) => b.include && b.text.trim() && b.status !== 'done');
+      goK(w, first < 0 ? { stage: 'summary' } : { stage: 'inquiry', current: first });
+    });
+
+    return h('div', { class: 'card' },
+      kHeader(w, 2, K.ui.beliefsTitle, K.ui.beliefsText),
+      w.beliefs.length ? list : h('p', { class: 'muted' }, K.ui.noBeliefs),
+      h('button', { class: 'small', onclick: () => { w.beliefs.push(newBelief('', 0)); rerender(); } }, K.ui.addBelief),
+      h('div', { class: 'nav-row' },
+        h('button', { onclick: () => goK(w, { stage: 'statements', statement: K.statements.length }) }, K.ui.back),
+        begin));
+  }
+
+  // Stage 3: the four questions and the turnarounds, for one statement.
+  function renderKInquiry(w) {
+    const b = w.beliefs[w.current];
+    if (!b) { w.stage = 'beliefs'; return renderKBeliefs(w); }
+    if (b.step === 4 && !b.turnarounds.length) b.turnarounds = defaultTurnarounds(b);
+    const inc = includedBeliefs(w);
+
+    const dots = h('div', { class: 'dots', role: 'list' }, inc.map((x, k) =>
+      h('button', {
+        role: 'listitem',
+        class: 'dot' + (x === b ? ' current' : '') + (x.status === 'done' ? ' done' : ''),
+        title: K.ui.fromStatement(k + 1),
+        'aria-label': K.ui.fromStatement(k + 1),
+        onclick: () => goK(w, { current: w.beliefs.indexOf(x) }),
+      })));
+    const pips = h('div', { class: 'stepper' }, K.ui.stepLabels.map((label, i) =>
+      h('button', {
+        class: 'step-pip' + (i === b.step ? ' current' : '') + (i < b.step ? ' past' : '') + (i === 4 ? ' wide' : ''),
+        title: K.ui.stepTitles[i],
+        onclick: () => goK(b, { step: i }),
+      }, label)));
+
+    const head = h('div', { class: 'work-head' },
+      h('div', { class: 'stage-row' },
+        h('span', { class: 'stage-num' }, K.ui.inquiryOf(inc.indexOf(b) + 1, inc.length)),
+        h('span', { class: 'row' },
+          h('button', { class: 'link', onclick: () => goK(w, { stage: 'beliefs' }) }, K.ui.editBeliefs),
+          h('button', { class: 'link', onclick: () => goK(w, { stage: 'summary' }) }, K.ui.summary))),
+      dots,
+      h('blockquote', { class: 'thought-quote' }, b.text),
+      pips);
+
+    const body = b.step <= 1 ? kYesNo(w, b) : b.step === 4 ? kTurnarounds(w, b) : kReflect(w, b);
+    return h('div', { class: 'card work' }, head, body);
+  }
+
+  // Questions 1 and 2: yes or no. "No" to question 1 goes straight to question 3.
+  function kYesNo(w, b) {
+    const i = b.step;
+    const q = K.questions[i];
+    const key = i === 0 ? 'q1' : 'q2';
+    const answer = (v) => goK(b, i === 0 ? (v === 'no' ? { q1: v, q2: null, step: 2 } : { q1: v, step: 1 }) : { q2: v, step: 2 });
+    const choice = (v, label) => h('button', { class: b[key] === v ? 'primary' : null, 'aria-pressed': String(b[key] === v), onclick: () => answer(v) }, label);
+    return h('div', { class: 'ws-step' },
+      h('h3', null, `${i + 1}. ${q.title}`),
+      h('p', { class: 'muted small' }, q.note),
+      h('div', { class: 'choice-row' }, choice('yes', K.ui.yes), choice('no', K.ui.no)),
+      i > 0 ? h('div', { class: 'nav-row' }, h('button', { onclick: () => goK(b, { step: i - 1 }) }, K.ui.back)) : null,
+      kSkip(w));
+  }
+
+  // Questions 3 and 4: written answers.
+  function kReflect(w, b) {
+    const i = b.step;
+    const q = K.questions[i];
+    const key = i === 2 ? 'q3' : 'q4';
+    const ta = autoTextarea({ class: 'insights', value: b[key], placeholder: i === 2 ? K.ui.q3Placeholder : K.ui.q4Placeholder, 'aria-label': q.title }, (v) => { b[key] = v; markDirty(); });
+    const prev = i === 2 && b.q1 === 'no' ? 0 : i - 1;
+    return h('div', { class: 'ws-step' },
+      h('h3', null, `${i + 1}. ${q.title}`),
+      q.prompts ? h('ul', { class: 'prompts' }, q.prompts.map((p) => h('li', null, p))) : h('p', { class: 'muted' }, q.note),
+      ta,
+      h('div', { class: 'nav-row' },
+        h('button', { onclick: () => goK(b, { step: prev }) }, K.ui.back),
+        h('button', { class: 'primary', onclick: () => goK(b, { step: i + 1 }) }, K.ui.next)),
+      kSkip(w));
+  }
+
+  function kTurnarounds(w, b) {
+    const T = K.turnaround;
+    const cards = b.turnarounds.map((t) => {
+      const kind = T.kinds.find((k) => k.label === t.kind);
+      return h('div', { class: 'turn-card' },
+        h('span', { class: 'field-label' }, h('b', null, t.kind || K.ui.turnText)),
+        autoTextarea({ value: t.text, placeholder: kind ? kind.placeholder : K.ui.turnText, 'aria-label': t.kind || K.ui.turnText }, (v) => { t.text = v; markDirty(); }),
+        h('span', { class: 'muted small' }, K.ui.examplesLabel),
+        autoTextarea({ class: 'examples', value: t.examples, placeholder: K.ui.examplesPlaceholder, 'aria-label': K.ui.examplesLabel }, (v) => { t.examples = v; markDirty(); }));
+    });
+    const next = nextPendingBelief(w, w.current);
+    const isS6 = T.s6.some((k) => b.turnarounds[0] && k.label === b.turnarounds[0].kind);
+    return h('div', { class: 'ws-step' },
+      h('h3', null, T.title),
+      h('p', { class: 'muted' }, T.intro),
+      h('p', { class: 'muted small' }, isS6 ? T.s6note : T.example),
+      h('div', { class: 'turns' }, cards),
+      h('button', { class: 'small', onclick: () => { b.turnarounds.push({ kind: '', text: '', examples: '' }); goK(b, {}); } }, K.ui.addTurn),
+      h('div', { class: 'nav-row' },
+        h('button', { onclick: () => goK(b, { step: 3 }) }, K.ui.back),
+        h('button', { class: 'primary', onclick: () => {
+          b.status = 'done';
+          const following = nextPendingBelief(w, w.current);
+          goK(w, following < 0 ? { stage: 'summary' } : { current: following });
+          toast(K.ui.done);
+        } }, K.ui.complete(next < 0 || next === w.current))),
+      kSkip(w));
+  }
+
+  function kSkip(w) {
+    const next = nextPendingBelief(w, w.current);
+    if (next < 0 || next === w.current) return null;
+    return h('div', { class: 'skip-row' }, h('button', { class: 'link', onclick: () => goK(w, { current: next }) }, K.ui.skip));
+  }
+
+  function renderKSummary(w) {
+    const inc = includedBeliefs(w);
+    const done = inc.filter((b) => b.status === 'done').length;
+    const yn = (v) => (v === 'yes' ? K.ui.yes : v === 'no' ? K.ui.no : '—');
+    const items = inc.map((b) => {
+      const turns = b.turnarounds.filter((t) => t.text.trim());
+      return h('li', { class: 'summary-item' + (b.status === 'done' ? ' done' : '') },
+        h('blockquote', { class: 'thought-quote' }, b.text),
+        b.q1 ? h('p', null, h('span', { class: 'k' }, K.ui.isTrue), yn(b.q1), b.q2 ? ` · ${K.ui.absolutely}${yn(b.q2)}` : '') : null,
+        b.q3.trim() ? h('p', null, h('span', { class: 'k' }, K.ui.reaction), b.q3) : null,
+        b.q4.trim() ? h('p', null, h('span', { class: 'k' }, K.ui.without), b.q4) : null,
+        turns.length ? h('div', null, h('span', { class: 'k' }, K.ui.turnarounds),
+          h('ul', { class: 'turn-list' }, turns.map((t) => h('li', null, t.text,
+            t.examples.trim() ? h('span', { class: 'muted' }, ' — ' + t.examples.trim().replace(/\n+/g, ' · ')) : null)))) : null,
+        h('div', { class: 'row' },
+          h('span', { class: 'muted small' }, b.status === 'done' ? K.ui.questioned : K.ui.notYet),
+          h('button', { class: 'link', onclick: () => { if (b.status === 'done') b.step = 4; goK(w, { stage: 'inquiry', current: w.beliefs.indexOf(b) }); } },
+            b.status === 'done' ? K.ui.review : K.ui.work)));
+    });
+
+    return h('div', { class: 'card' },
+      h('div', { class: 'stage-row' },
+        h('span', { class: 'stage-num' }, K.ui.summaryProgress(done, inc.length)),
+        h('button', { class: 'link danger-link', onclick: () => deleteWorksheet(w) }, K.ui.deleteWs)),
+      h('h2', null, done === inc.length && inc.length ? K.ui.summaryDone : K.ui.summaryTitle),
+      w.name.trim() || w.situation.trim() ? h('p', { class: 'muted' }, [w.name.trim(), w.situation.trim()].filter(Boolean).join(' — ')) : null,
+      h('ol', { class: 'summary' }, items),
+      h('div', { class: 'nav-row' },
+        h('button', { onclick: () => goK(w, { stage: 'beliefs' }) }, K.ui.backStatements),
+        h('span', { class: 'row' },
+          h('button', { onclick: () => katieSummaryToDiary(w) }, K.ui.addToDiary),
+          h('button', { class: 'primary', onclick: () => setView('diary') }, K.ui.backToDiary))));
+  }
+
+  // The worksheet summary becomes a new dated diary entry.
+  function katieSummaryToDiary(w) {
+    const lines = [K.ui.diaryHeading];
+    if (w.name.trim()) lines.push(K.ui.with + w.name.trim());
+    if (w.situation.trim()) lines.push(w.situation.trim());
+    for (const b of includedBeliefs(w)) {
+      lines.push(`• ${b.text}`);
+      if (b.q4.trim()) lines.push(`  ${K.ui.without}${b.q4.trim().replace(/\n+/g, ' ')}`);
+      for (const t of b.turnarounds) {
+        if (t.text.trim()) lines.push(`  ↻ ${t.text.trim()}${t.examples.trim() ? ' — ' + t.examples.trim().replace(/\n+/g, ' · ') : ''}`);
+      }
+    }
+    const e = newEntry(lines.join('\n') + '\n');
+    state.doc.entries.push(e);
+    state.entryId = e.id;
+    markDirty();
+    setView('diary');
+    renderDiary();
+    toast(K.ui.added);
+  }
+
   // ---------- wiring ----------
 
   function run(fn) {
@@ -1012,6 +1424,7 @@
       showBanner();
     }));
     $('btnNewReflection').addEventListener('click', () => newReflection(state.selection));
+    $('btnNewWorksheet').addEventListener('click', () => newWorksheet(state.selection));
     document.querySelectorAll('.tabs [data-view]').forEach((tab) => tab.addEventListener('click', () => setView(tab.dataset.view)));
 
     // Language flags: refresh the encrypted browser copy first so the other page can unlock it.
@@ -1051,6 +1464,7 @@
 
     renderDiary();
     renderReflect();
+    renderKatie();
     showBanner();
     $('editor').focus();
   }
